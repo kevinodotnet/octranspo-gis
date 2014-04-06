@@ -1,6 +1,52 @@
+<?
+
+$appId = 'CHANGE_ME';
+$apiKey = 'CHANGE_ME';
+
+//
+// Good luck with your coding! 
+//
+// You'll need to get your own appID and apiKey though 
+// from http://www.octranspo1.com/developers/register
+//
+// Copyright Kevin O'Donnell, but I hereby license you
+// to do whatever the heck you want with the code for
+// any reason, blah blah blah, including removing this
+// copyright notice.
+//
+// By the way, get interested in Copyright issues
+// by reading anything on http://www.michaelgeist.ca/
+//
+// kevino@kevino.net
+//
+
+$devel = $_GET['devel'];
+$stop = $_GET['stop'];
+$reload = $_GET['reload'];
+if ($reload == '') { $reload = 0; }
+$routes = explode(" ",$_GET['route']);
+$route = $_GET['route'];
+
+?>
 <html>
 <head>
-<title>OCTranspo Dead Simple Bus Updates</title>
+<?
+if ($stop != '') {
+	if ($route != '') {
+		?>
+		<title><?= $stop.': '.$route ?> OCTranspo Dead Simple Bus Updates</title>
+		<?
+	} else {
+		?>
+		<title><?= $stop ?>: OCTranspo Dead Simple Bus Updates</title>
+		<?
+	}
+} else {
+	?>
+	<title>OCTranspo Dead Simple Bus Updates</title>
+	<?
+}
+?>
 <meta name="viewport" content="width=320; initial-scale=1.0; maximum-scale=1.0; user-scalable=0;"/>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
 <style>
@@ -34,12 +80,6 @@ td {
 
 <?
 
-$appId = '12a97a45';
-$apiKey = '1306950a573e79601506d6c1564c4d42';
-
-$devel = $_GET['devel'];
-$stop = $_GET['stop'];
-$route = $_GET['route'];
 
 if ($stop == "") {	
 	include("foot.php");
@@ -48,48 +88,34 @@ if ($stop == "") {
 
 ?>
 
-<div id="fb-root"></div>
-<script>(function(d, s, id) {
-  var js, fjs = d.getElementsByTagName(s)[0];
-  if (d.getElementById(id)) return;
-  js = d.createElement(s); js.id = id;
-  js.src = "//connect.facebook.net/en_US/all.js#xfbml=1&appId=204783589569220";
-  fjs.parentNode.insertBefore(js, fjs);
-}(document, 'script', 'facebook-jssdk'));</script>
 <script type="text/javascript">
-
   var _gaq = _gaq || [];
   _gaq.push(['_setAccount', 'UA-6324294-4']);
   _gaq.push(['_trackPageview']);
-
   (function() {
     var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
     ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
     var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
   })();
-
 </script>
+
 <div style="width: 300px; text-align: center;">
 
-<div style="float: left; width: 70px;">&nbsp;</div>
-<div class="fb-like" style="float: left;" data-href="http://threebit.net/app/stop.php" data-send="false" data-layout="button_count" data-width="55" data-show-faces="false"></div>
-<div style="float: left;"><a  href="https://twitter.com/share" class="twitter-share-button" data-url="http://threebit.net/app/stop.php" data-text="This simple #OCTranspo realtime site works for me" data-via="odonnell_k">Tweet</a></div>
-<script>!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src="//platform.twitter.com/widgets.js";fjs.parentNode.insertBefore(js,fjs);}}(document,"script","twitter-wjs");</script>
-</div>
-<div style="clear: both;">&nbsp;</div>
-
-<?
+<?php
 
 if ($route != "") {
-	getNextStops($route,$stop);
+	foreach ($routes as $r) {
+		getNextStops($r,$stop,1);
+	}
 	flush();
 	include("foot.php");
 	return;
 }
 
-
 # Get routes for the stop
-$url = "https://api.octranspo1.com/GetRouteSummaryForStop";
+
+#	$url = "https://api.octranspo1.com/GetRouteSummaryForStop/ocapi";
+$url = "http://api.octranspo1.com/v1.1/GetRouteSummaryForStop";
 
 $ch = curl_init();
 curl_setopt($ch,CURLOPT_URL,$url);
@@ -101,6 +127,10 @@ $result = ob_get_contents();
 ob_end_clean();
 curl_close($ch);
 
+$result = preg_replace("/soap:/","",$result);
+$result = preg_replace('/ xmlns:[^"]+"[^"]+"/',"",$result);
+$result = preg_replace('/ xmlns="[^"]+"/',"",$result);
+
 if (preg_match("/<div/",$result)) {
 	print "<tr><td colspan=\"3\">";
 	print "#failbus!<br/>API error at OCTranspo; try refreshing...";
@@ -110,21 +140,18 @@ if (preg_match("/<div/",$result)) {
 	return;
 }
 
-if ($devel) { print "<!-- STOP DATA \n\n $result \n\n -->"; }
-
-?>
-<?
+if ($devel) { print "<!-- STOP DATA \n\n $result \n\n -->\n"; }
 
 $xml = simplexml_load_string($result);
-$routes = $xml->xpath("//Route/node");
-
-if (sizeof($routes) == 0) {
-	$routes = $xml->xpath("//Route");
-}
+$xml->registerXPathNamespace("soap", "http://schemas.xmlsoap.org/soap/envelope/");
+$xml->registerXPathNamespace("oc", "http://octranspo.com");
+if ($devel) { print "<!--  xml: \n\n"; print print_r($xml); print "--> \n\n"; }
+# print "<!--\n\n XML: \n\n"; print print_r($xml); print "--> \n\n";
+$routes = $xml->xpath("//Route");
+if ($devel) { print "<!--\n\n routes: \n\n"; print print_r($routes); print "--> \n\n"; }
 
 $done = array();
 while (list(,$route) = each($routes)) {
-	#print "<!-- DONE \n"; print_r($done); print "\n-->\n";
 	foreach ($route->children() as $child) {
 		if ($child->getName() == 'RouteNo') { $routeNo = $child; }
 		if ($child->getName() == 'RouteHeading') { $dest = $child; }
@@ -141,11 +168,40 @@ while (list(,$route) = each($routes)) {
 include("foot.php");
 return;
 
-function getNextStops($route,$stop) {
+function renderReload() {
+	global $stop;
+	global $route;
+	global $reload;
+	if ($reload <= 10) {
+	?>
+	<div id="timer" style="font-size: 80%;"></div>
+	<script>
+	var index = 90;
+	function rr() {
+		if (index-- <= 0) {
+			document.getElementById('timer').innerHTML = 'Reloading... ';
+			window.location = 'http://threebit.net/app/stop.php?stop=<?= $stop ?>&route=<?= $route ?>&reload=<?= $reload ?>';
+		} else {
+			document.getElementById('timer').innerHTML = 'Auto reload in ' + index + ' seconds...';
+		}
+	}
+	setInterval(function(){rr()},1000);
+	</script>
+	<?
+	} else {
+	?>
+	<div id="timer" style="font-size: 80%;">No more reloads (max of 20)</div>
+	<?
+	}
+}
+
+function getNextStops($route,$stop,$sayNotRunning=0) {
 	global $appId;
 	global $apiKey;
+	global $devel;
 
 	$url = "https://api.octranspo1.com/GetNextTripsForStop";
+	$url = "http://api.octranspo1.com/v1.1/GetNextTripsForStop";
 	$ch = curl_init();
 	curl_setopt($ch,CURLOPT_URL,$url);
 	curl_setopt($ch,CURLOPT_POST,4);
@@ -156,34 +212,29 @@ function getNextStops($route,$stop) {
 	ob_end_clean();
 	curl_close($ch);
 
-	?>
-	<table>
-	<tr>
-	<td class="h"><a href="?stop=<?= $stop ?>&route=<?= $route ?>">#<?= $route ?></a> to</td>
-	<td class="h">In</td>
-	<td class="h">As per</td>
-	</tr>
-	<?
-	
+	$result = preg_replace("/soap:/","",$result);
+	$result = preg_replace('/ xmlns:[^"]+"[^"]+"/',"",$result);
+	$result = preg_replace('/ xmlns="[^"]+"/',"",$result);
+	if ($devel) {
+		print "<!-- STOP $stop and ROUTE $route RESULT\n $result \n -->\n";
+	}
+
 	if (preg_match("/<div/",$result)) {
 		?>
-		<tr>
-		<td colspan="3">
 		<?
 		print "#failbus!<br/>API error at OCTranspo.<br/>try refreshing";
 		print "<!-- XML: ".$result." -->\n";
 		?>
-		</td>
-		</tr>
-		</table>
 		<?
 		return;
 	}
-	
+
 	$xml = simplexml_load_string($result);
-	$result = $xml->xpath("//Trip/node");
+	# print "<!-- print_r() \n\n "; print print_r($xml); print " -->\n";
+	$result = $xml->xpath("//Trip");
 
 	$found = 0;
+	$first = 1;
 	while (list(,$trip) = each($result)) {
 		$found = 1;
 		$dest = "";
@@ -208,8 +259,20 @@ function getNextStops($route,$stop) {
 			$secs = intval(((double) $adjAge) * 60);
 			$updated = $secs."s ago";
 		}
+
+		if ($first) {
 	
 		?>
+	<table>
+	<tr>
+	<td class="h"><a href="?stop=<?= $stop ?>&route=<?= $route ?>">#<?= $route ?></a> to</td>
+	<td class="h">In</td>
+	<td class="h">As per</td>
+	</tr>
+	<?
+	}
+	$first = 0;
+	?>
 		<tr>
 		<td><?= $dest ?></td>
 		<td><?= $adjTime ?>m</td>
@@ -218,15 +281,21 @@ function getNextStops($route,$stop) {
 		<?
 	}
 	if ($found == 0) {
+		if ($sayNotRunning) {
 		?>
+		<table>
 		<tr>
-		<td colspan="3">none at this time</td>
+		<td class="h"><?= $route ?> - not running</td>
 		</tr>
+		</table>
+		<?
+		}
+	} else {
+		?>
+		</table>
 		<?
 	}
-	?>
-	</table>
-	<?
 }
 
 ?>
+
